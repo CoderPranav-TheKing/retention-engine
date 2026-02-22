@@ -46,14 +46,33 @@ def generate_message(name, items, discount, coupon):
 
 @app.post("/upload", response_class=HTMLResponse)
 async def upload_csv(file: UploadFile = File(...)):
-    df = pd.read_csv(file.file)
 
-    required_columns = {"name", "phone", "items", "amount", "date"}
-    if not required_columns.issubset(set(df.columns)):
+    # Try normal comma separator first
+    try:
+        df = pd.read_csv(file.file)
+    except:
         return HTMLResponse(
             """
+            <h3>❌ Could not read CSV file</h3>
+            <a href="/">Go Back</a>
+        """
+        )
+
+    # Normalize column names
+    df.columns = df.columns.astype(str)
+    df.columns = df.columns.str.strip().str.lower()
+
+    print("Detected columns:", df.columns.tolist())
+
+    required_columns = {"name", "phone", "items", "amount", "date"}
+    missing = required_columns - set(df.columns)
+
+    if missing:
+        return HTMLResponse(
+            f"""
             <h3>❌ Invalid CSV Format</h3>
-            <p>Required columns: name, phone, items, amount, date</p>
+            <p><b>Missing columns:</b> {missing}</p>
+            <p><b>Detected columns:</b> {df.columns.tolist()}</p>
             <a href="/">Go Back</a>
         """
         )
@@ -62,10 +81,13 @@ async def upload_csv(file: UploadFile = File(...)):
     processed_count = 0
 
     for _, row in df.iterrows():
-        name = row["name"]
-        phone = str(row["phone"])
-        items = row["items"]
-        amount = float(row["amount"])
+        try:
+            name = str(row["name"])
+            phone = str(row["phone"])
+            items = str(row["items"])
+            amount = float(row["amount"])
+        except:
+            continue
 
         # Simple discount logic
         if amount > 2000:
@@ -77,16 +99,16 @@ async def upload_csv(file: UploadFile = File(...)):
 
         coupon_code = f"LOYAL{random.randint(1000,9999)}"
 
-        # Generate AI message
-        message = generate_message(name, items, discount, coupon_code)
+        try:
+            message = generate_message(name, items, discount, coupon_code)
+        except Exception as e:
+            message = f"⚠️ Gemini Error: {str(e)}"
 
-        # Log to terminal
         print("------")
         print(f"Customer: {name} | Phone: {phone}")
         print(message)
         print("------")
 
-        # Add to HTML output
         results_html += f"""
         <div style="border:1px solid #ccc;padding:10px;margin:10px;">
             <b>{name}</b> ({phone})<br>
