@@ -47,7 +47,7 @@ def generate_message(name, items, discount, coupon):
 @app.post("/upload", response_class=HTMLResponse)
 async def upload_csv(file: UploadFile = File(...)):
 
-    # Try normal comma separator first
+    # Read CSV
     try:
         df = pd.read_csv(file.file)
     except:
@@ -64,14 +64,25 @@ async def upload_csv(file: UploadFile = File(...)):
 
     print("Detected columns:", df.columns.tolist())
 
-    required_columns = {"name", "phone", "items", "amount", "date"}
-    missing = required_columns - set(df.columns)
+    # Required base columns
+    required_columns = {"name", "phone", "amount", "date"}
 
-    if missing:
+    missing_base = required_columns - set(df.columns)
+
+    # Handle item/items flexibility
+    if "items" in df.columns:
+        item_column = "items"
+    elif "item" in df.columns:
+        item_column = "item"
+    else:
+        item_column = None
+
+    if missing_base or item_column is None:
         return HTMLResponse(
             f"""
             <h3>❌ Invalid CSV Format</h3>
-            <p><b>Missing columns:</b> {missing}</p>
+            <p><b>Missing base columns:</b> {missing_base}</p>
+            <p><b>Need either 'item' or 'items' column</b></p>
             <p><b>Detected columns:</b> {df.columns.tolist()}</p>
             <a href="/">Go Back</a>
         """
@@ -84,7 +95,7 @@ async def upload_csv(file: UploadFile = File(...)):
         try:
             name = str(row["name"])
             phone = str(row["phone"])
-            items = str(row["items"])
+            items = str(row[item_column])
             amount = float(row["amount"])
         except:
             continue
